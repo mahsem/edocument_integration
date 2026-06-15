@@ -11,15 +11,30 @@ This app extends the [edocument](https://github.com/prilk-consulting/edocument) 
 
 This app requires the `edocument` app to be installed first.
 
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
+### Supported Versions
+
+| Frappe/ERPNext | Branch | Python | Node.js |
+|----------------|--------|--------|---------|
+| v15 | `version-15` | 3.10 | 18 |
+| v16 | `develop` | 3.14 | 24 |
+
+### Installation Steps
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
-bench get-app https://github.com/prilk-consulting/edocument_integration --branch $MAJOR_VERSION
-bench install-app edocument_integration
-```
 
-Please use a branch (`MAJOR_VERSION`) that matches the major version of ERPNext you are using. For example, `version-14` or `version-15`. If you are a developer contributing new features, you'll want to use the `develop` branch instead.
+# For Frappe/ERPNext v15
+bench get-app https://github.com/prilk-consulting/edocument --branch version-15
+bench get-app https://github.com/prilk-consulting/edocument_integration --branch version-15
+
+# For Frappe/ERPNext v16 (develop)
+bench get-app https://github.com/prilk-consulting/edocument
+bench get-app https://github.com/prilk-consulting/edocument_integration
+
+# Install on your site
+bench --site your-site install-app edocument
+bench --site your-site install-app edocument_integration
+```
 
 ## Setup
 

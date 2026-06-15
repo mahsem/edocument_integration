@@ -9,6 +9,104 @@ import frappe
 from frappe import _
 
 
+def _validate_edocument_for_transmission(edocument_doc):
+	"""
+	Validate eDocument before transmission.
+
+	Checks that:
+	1. eDocument profile is configured
+	2. XML is validated successfully
+	3. Source document exists and is submitted (docstatus == 1) for outgoing documents
+	4. Invoice ID in XML matches the source document name for outgoing documents
+
+	Args:
+		edocument_doc: EDocument document object
+
+	Raises:
+		frappe.ValidationError: If validation fails
+	"""
+	# Check if profile is configured
+	if not edocument_doc.edocument_profile:
+		frappe.throw(_("No e-document profile configured for this document."))
+
+	# Check if XML is generated and validated
+	if edocument_doc.status != "Validation Successful":
+		frappe.throw(_("Document is not validated. Please validate XML first."))
+
+	# Additional validation for outgoing documents with source documents
+	if not edocument_doc.edocument_source_document or edocument_doc.direction != "Outgoing":
+		return
+
+	# Check that source document is submitted
+	source_docstatus = frappe.db.get_value(
+		edocument_doc.edocument_source_type, edocument_doc.edocument_source_document, "docstatus"
+	)
+	if source_docstatus != 1:
+		frappe.throw(
+			_(
+				"Cannot transmit eDocument: The source document '{0}' is not submitted. "
+				"Please submit the document first."
+			).format(edocument_doc.edocument_source_document)
+		)
+
+	# Get XML content and extract invoice ID
+	xml_bytes = edocument_doc._get_xml_from_attached_files()
+	xml_content = xml_bytes.decode("utf-8") if isinstance(xml_bytes, bytes) else xml_bytes
+
+	try:
+		from lxml import etree as ET
+
+		root = ET.fromstring(xml_content.encode("utf-8") if isinstance(xml_content, str) else xml_content)
+
+		# Extract invoice ID from XML (UBL and CII formats)
+		invoice_id = None
+		namespaces = root.nsmap
+
+		# Try UBL format: cbc:ID
+		cbc_ns = namespaces.get("cbc")
+		if cbc_ns:
+			id_elem = root.find(f".//{{{cbc_ns}}}ID")
+			if id_elem is not None and id_elem.text:
+				invoice_id = id_elem.text.strip()
+
+		# Try CII format: rsm:ExchangedDocument/ram:ID
+		if not invoice_id:
+			ram_ns = namespaces.get("ram")
+			if ram_ns:
+				id_elem = root.find(f".//{{{ram_ns}}}ExchangedDocument/{{{ram_ns}}}ID")
+				if id_elem is not None and id_elem.text:
+					invoice_id = id_elem.text.strip()
+
+		# Validate invoice ID matches source document name
+		if not invoice_id:
+			frappe.throw(
+				_(
+					"Cannot transmit eDocument: Unable to extract invoice ID from XML. "
+					"Please regenerate the eDocument."
+				)
+			)
+
+		if invoice_id != edocument_doc.edocument_source_document:
+			frappe.throw(
+				_(
+					"Cannot transmit eDocument: The invoice ID in XML '{0}' does not match "
+					"the source document name '{1}'. Please regenerate the eDocument."
+				).format(invoice_id, edocument_doc.edocument_source_document)
+			)
+
+	except frappe.ValidationError:
+		# Re-raise our own validation errors
+		raise
+	except Exception as e:
+		frappe.log_error(
+			f"Error validating invoice ID in XML for eDocument {edocument_doc.name}: {e!s}",
+			"EDocument Validation Error",
+		)
+		frappe.throw(
+			_("Cannot transmit eDocument: Error parsing XML. Please check the eDocument and try again.")
+		)
+
+
 @frappe.whitelist()
 def get_edocument_integration_settings(profile, company=None):
 	# Get EDocument Integration Settings for the given profile
@@ -35,16 +133,12 @@ def get_edocument_integration_settings(profile, company=None):
 
 
 @frappe.whitelist()
-def transmit_edocument(edocument_name):
+def transmit_edocument(edocument_name: str):
 	# Transmit E-document using the configured integrator
 	try:
 		edocument_doc = frappe.get_doc("EDocument", edocument_name)
-		if not edocument_doc.edocument_profile:
-			frappe.throw(_("No e-document profile configured for this document."))
 
-		# Check if XML is generated and validated
-		if edocument_doc.status != "Validation Successful":
-			frappe.throw(_("Document is not validated. Please validate XML first."))
+		_validate_edocument_for_transmission(edocument_doc)
 
 		# Get XML content from attached file using EDocument's method
 		xml_bytes = edocument_doc._get_xml_from_attached_files()
@@ -96,24 +190,22 @@ def transmit_edocument(edocument_name):
 		edocument_doc.add_comment(comment_type="Info", text="\n".join(parts))
 
 		# Set status to Transmission Successful and store reference ID
-		frappe.db.set_value(
-			"EDocument",
-			edocument_name,
-			{"status": "Transmission Successful", "error": None, "reference": transmission_id},
-			update_modified=False,
-		)
-		frappe.db.commit()
+		edocument_doc.reload()
+		edocument_doc.status = "Transmission Successful"
+		edocument_doc.error = None
+		edocument_doc.reference = transmission_id
+		edocument_doc.save()
 
 		return transmission_result
+	except frappe.ValidationError:
+		# Validation errors (e.g., from _validate_source_docstatus) should be re-raised as-is
+		raise
 	except Exception as e:
 		# Set status to Transmission Failed
-		frappe.db.set_value(
-			"EDocument",
-			edocument_name,
-			{"status": "Transmission Failed", "error": str(e)},
-			update_modified=False,
-		)
-		frappe.db.commit()
+		edocument_doc.reload()
+		edocument_doc.status = "Transmission Failed"
+		edocument_doc.error = str(e)
+		edocument_doc.save()
 
 		frappe.log_error(
 			f"E-document transmission failed for document {edocument_name}: {e!s}",
@@ -122,22 +214,65 @@ def transmit_edocument(edocument_name):
 		frappe.throw(_("Transmission failed: {0}").format(str(e)))
 
 
+def _handle_recommand_notification(notification: dict) -> dict:
+	"""
+	Handle Recommand webhook notification by fetching actual XML from API.
+
+	Args:
+		notification: Recommand webhook payload with eventType, documentId, teamId
+
+	Returns:
+		dict with xml_bytes and document_id, or raises exception on error
+	"""
+	document_id = notification.get("documentId")
+	team_id = notification.get("teamId")
+
+	if not document_id or not team_id:
+		raise ValueError(f"Missing documentId or teamId in notification: {notification}")
+
+	# Find integration settings by team_id (account_id)
+	settings = frappe.db.get_value(
+		"EDocument Integration Settings",
+		{"account_id": team_id, "edocument_integrator": "Recommand"},
+		["name", "edocument_profile", "company"],
+		as_dict=True,
+	)
+
+	if not settings:
+		raise ValueError(f"No Recommand integration settings found for team_id: {team_id}")
+
+	# Get full integration settings with decrypted credentials
+	integration_settings = get_edocument_integration_settings(settings.edocument_profile, settings.company)
+
+	# Fetch actual XML from Recommand API
+	from .recommand_api import get_recommand_client
+
+	client = get_recommand_client(integration_settings)
+	doc_details = client.get_document_status(team_id, document_id)
+
+	xml_content = doc_details.get("document", {}).get("xml")
+	if not xml_content:
+		raise ValueError(f"No XML content in document {document_id}. Response: {doc_details}")
+
+	xml_bytes = xml_content.encode("utf-8") if isinstance(xml_content, str) else xml_content
+	return {"xml_bytes": xml_bytes, "document_id": document_id}
+
+
+# nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
 @frappe.whitelist(allow_guest=True)
 def webhook(**kwargs):
-	# Webhook endpoint to receive incoming PEPPOL documents from providers
+	"""Webhook endpoint to receive incoming PEPPOL documents from providers."""
+	import json
+
 	request_log = None
 	try:
 		r = frappe.request
 		if not r:
-			frappe.log_error("No request data received", "E-Document Webhook Error")
 			return {"status": "error", "message": "No request data received"}, 400
 
-		xml_bytes = r.get_data()
-		if not xml_bytes:
-			frappe.log_error("No XML content found in request", "E-Document Webhook Error")
-			return {"status": "error", "message": "No XML content found in request"}, 400
-		if isinstance(xml_bytes, str):
-			xml_bytes = xml_bytes.encode("utf-8")
+		request_data = r.get_data()
+		if not request_data:
+			return {"status": "error", "message": "No content found in request"}, 400
 
 		from frappe.integrations.utils import create_request_log
 
@@ -148,22 +283,46 @@ def webhook(**kwargs):
 			request_headers=r.headers,
 		)
 
-		# Create EDocument record and attach XML file (no validation triggered)
-		edocument = frappe.get_doc(
-			{
-				"doctype": "EDocument",
-			}
-		)
-		edocument.insert(ignore_permissions=True)
-		# Manual commit required: Webhook must persist EDocument before returning response to external service
-		frappe.db.commit()  # nosemgrep
+		# Try to parse as Recommand JSON notification, otherwise treat as raw XML
+		xml_bytes = None
+		document_id = None
 
-		# Attach XML file
-		filename = f"document_{edocument.name}.xml"
+		try:
+			data_str = request_data.decode("utf-8") if isinstance(request_data, bytes) else request_data
+			notification = json.loads(data_str)
+
+			if notification.get("eventType") == "document.received":
+				result = _handle_recommand_notification(notification)
+				xml_bytes = result["xml_bytes"]
+				document_id = result["document_id"]
+		except (json.JSONDecodeError, UnicodeDecodeError):
+			pass  # Not JSON, treat as raw XML
+		except ValueError as e:
+			frappe.log_error(str(e), "E-Document Webhook Error")
+			return {"status": "error", "message": str(e)}, 400
+
+		# Fallback: treat as raw XML
+		if xml_bytes is None:
+			xml_bytes = request_data.encode("utf-8") if isinstance(request_data, str) else request_data
+
+		# Check for duplicate
+		if document_id:
+			existing = frappe.db.exists("EDocument", {"reference": document_id})
+			if existing:
+				result = {"edocument": existing, "skipped": True, "reason": "duplicate"}
+				request_log.status = "Completed"
+				request_log.response = frappe.as_json(result)
+				return {"status": "success", "result": result}, 200
+
+		# Create EDocument and attach XML
+		edocument = frappe.get_doc({"doctype": "EDocument", "reference": document_id})
+		edocument.insert(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep: Webhook must persist before returning
+
 		file_doc = frappe.get_doc(
 			{
 				"doctype": "File",
-				"file_name": filename,
+				"file_name": f"document_{document_id or edocument.name}.xml",
 				"attached_to_doctype": "EDocument",
 				"attached_to_name": edocument.name,
 				"content": xml_bytes,
@@ -171,27 +330,24 @@ def webhook(**kwargs):
 			}
 		)
 		file_doc.save(ignore_permissions=True)
-		# Manual commit required: Webhook must persist File attachment before returning response to external service
-		frappe.db.commit()  # nosemgrep
 
-		result = {
-			"edocument": edocument.name,
-		}
+		# Save EDocument again to trigger field detection (company, etc.) from attached XML
+		edocument.reload()
+		edocument.save(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep: Webhook must persist before returning
 
+		result = {"edocument": edocument.name, "document_id": document_id}
 		request_log.status = "Completed"
 		request_log.response = frappe.as_json(result)
 		return {"status": "success", "result": result}, 200
+
 	except Exception as e:
 		if request_log:
 			request_log.status = "Failed"
 			request_log.error = frappe.get_traceback()
 		frappe.db.rollback()
-		frappe.log_error(
-			f"E-Document webhook processing failed: {e!s}\n{frappe.get_traceback()}",
-			"E-Document Webhook Error",
-		)
-		# Manual commit required: Webhook must commit error state before returning error response to external service
-		frappe.db.commit()  # nosemgrep
+		frappe.log_error(f"E-Document webhook failed: {e!s}", "E-Document Webhook Error")
+		frappe.db.commit()  # nosemgrep: Commit error state before returning
 		return {"status": "error", "message": "Internal server error"}, 500
 	finally:
 		if request_log:
@@ -199,7 +355,7 @@ def webhook(**kwargs):
 
 
 @frappe.whitelist()
-def poll_incoming_invoices(profile=None, company=None):
+def poll_incoming_invoices(profile: str | None = None, company: str | None = None):
 	"""
 	Poll Recommand inbox for incoming invoices and create EDocument records.
 
