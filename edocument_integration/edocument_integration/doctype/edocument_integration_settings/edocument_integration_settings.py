@@ -69,6 +69,7 @@ class EDocumentIntegrationSettings(Document):
 					"file_name": filename,
 					"attached_to_doctype": "EDocument",
 					"attached_to_name": edocument.name,
+					"attached_to_field": "xml_file",
 					"is_private": 1,
 					"content": xml_bytes,
 				}
