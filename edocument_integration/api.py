@@ -117,19 +117,22 @@ def get_edocument_integration_settings(profile, company=None):
 	docs = frappe.get_list("EDocument Integration Settings", filters=filters, limit_page_length=1)
 
 	if docs:
-		# Get full document to decrypt password field
-		settings_doc = frappe.get_doc("EDocument Integration Settings", docs[0].name)
-		return {
-			"api_key": settings_doc.api_key,
-			"api_secret": settings_doc.get_password("api_secret"),  # Decrypt password field
-			"base_url": settings_doc.base_url,
-			"edocument_integrator": settings_doc.edocument_integrator,
-			"company": settings_doc.company,
-			"account_id": settings_doc.account_id,
-			"company_id": settings_doc.company_id,
-		}
+		return _integration_settings_from_doc(frappe.get_doc("EDocument Integration Settings", docs[0].name))
 
 	return None
+
+
+def _integration_settings_from_doc(settings_doc) -> dict:
+	"""Integration settings with the decrypted API secret, as the provider clients expect."""
+	return {
+		"api_key": settings_doc.api_key,
+		"api_secret": settings_doc.get_password("api_secret"),
+		"base_url": settings_doc.base_url,
+		"edocument_integrator": settings_doc.edocument_integrator,
+		"company": settings_doc.company,
+		"account_id": settings_doc.account_id,
+		"company_id": settings_doc.company_id,
+	}
 
 
 @frappe.whitelist()
@@ -262,8 +265,10 @@ def _handle_recommand_notification(notification: dict) -> dict:
 				)
 		return {"event": event_type, "document_id": document_id, "edocument": edocument}
 
-	# Get full integration settings with decrypted credentials
-	integration_settings = get_edocument_integration_settings(settings.edocument_profile, settings.company)
+	# The webhook runs as Guest, so load the team's own settings without a permission check
+	integration_settings = _integration_settings_from_doc(
+		frappe.get_doc("EDocument Integration Settings", settings.name)
+	)
 
 	# Fetch actual XML from Recommand API
 	from .recommand_api import get_recommand_client
