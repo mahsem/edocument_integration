@@ -1,6 +1,8 @@
 # Copyright (c) 2025, Prilk Consulting BV and Contributors
 # See license.txt
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
 
@@ -52,7 +54,8 @@ class IntegrationTestEDocumentIntegrationSettings(IntegrationTestCase):
 
 	def test_incoming_xml_is_attached_once(self):
 		reference = "TEST-INBOX-DOC-0002"
-		self.addCleanup(self._delete_test_documents)
+		# The import commits; keep it in the test transaction so the class rollback undoes it
+		self.enterContext(patch.object(frappe.db, "commit"))
 
 		result = frappe.new_doc("EDocument Integration Settings").process_incoming_document(
 			PEPPOL_INVOICE_XML, reference
@@ -68,15 +71,3 @@ class IntegrationTestEDocumentIntegrationSettings(IntegrationTestCase):
 		self.assertEqual(
 			attachments[0].file_url, frappe.db.get_value("EDocument", result["edocument"], "xml_file")
 		)
-
-	def _delete_test_documents(self):
-		# process_incoming_document commits, which also persists other tests' records
-		for name in frappe.get_all(
-			"EDocument", filters={"reference": ["like", "TEST-INBOX-DOC-%"]}, pluck="name"
-		):
-			for file in frappe.get_all(
-				"File", filters={"attached_to_doctype": "EDocument", "attached_to_name": name}, pluck="name"
-			):
-				frappe.delete_doc("File", file, force=True)
-			frappe.delete_doc("EDocument", name, force=True)
-		frappe.db.commit()  # nosemgrep: undo the import's own commit
