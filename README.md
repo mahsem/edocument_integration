@@ -234,40 +234,13 @@ After receiving an incoming document:
 }
 ```
 
-### Poll Incoming Invoices
-
-**URL**: `/api/method/edocument_integration.api.poll_incoming_invoices`
-
-**Method**: POST
-
-**Parameters**:
-- `profile`: EDocument Profile name (required)
-- `company`: Company name (optional)
-
-**Description**: Manually poll for incoming invoices and create EDocument records
-
-**Response**:
-```json
-{
-  "status": "success",
-  "message": "Processed 2 invoice(s)",
-  "edocuments": [
-    {
-      "edocument": "EDOC-00001",
-      "document_id": "doc-123",
-      "profile": "PEPPOL"
-    }
-  ]
-}
-```
-
 ## Architecture
 
 The integration app follows a modular architecture:
 
 ### Core Components
 
-- **`api.py`**: Main API endpoints for transmission, webhooks, and polling
+- **`api.py`**: Main API endpoints for transmission and webhooks
 - **`recommand_api.py`**: Recommand PEPPOL API client implementation
 - **`b2brouter_api.py`**: B2B Router API client implementation
 - **`edocument_integration_settings/`**: DocType for integration configuration
