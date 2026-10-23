@@ -108,7 +108,7 @@ def _validate_edocument_for_transmission(edocument_doc):
 
 
 @frappe.whitelist()
-def get_edocument_integration_settings(profile, company=None):
+def get_edocument_integration_settings(profile: str, company: str | None = None):
 	# Get EDocument Integration Settings for the given profile
 	filters = {"edocument_profile": profile}
 	if company:
