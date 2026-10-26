@@ -99,8 +99,8 @@ def _validate_edocument_for_transmission(edocument_doc):
 		raise
 	except Exception as e:
 		frappe.log_error(
-			f"Error validating invoice ID in XML for eDocument {edocument_doc.name}: {e!s}",
-			"EDocument Validation Error",
+			title="EDocument Validation Error",
+			message=f"Error validating invoice ID in XML for eDocument {edocument_doc.name}: {e!s}",
 		)
 		frappe.throw(
 			_("Cannot transmit eDocument: Error parsing XML. Please check the eDocument and try again.")
@@ -217,8 +217,8 @@ def transmit_edocument(edocument_name: str):
 		edocument_doc.save()
 
 		frappe.log_error(
-			f"E-document transmission failed for document {edocument_name}: {e!s}",
-			"E-document Transmission Error",
+			title="E-document Transmission Error",
+			message=f"E-document transmission failed for document {edocument_name}: {e!s}",
 		)
 		frappe.throw(_("Transmission failed: {0}").format(str(e)))
 
@@ -328,7 +328,7 @@ def webhook(**kwargs):
 		except (json.JSONDecodeError, UnicodeDecodeError):
 			pass  # Not JSON, treat as raw XML
 		except ValueError as e:
-			frappe.log_error(str(e), "E-Document Webhook Error")
+			frappe.log_error(title="E-Document Webhook Error", message=str(e))
 			return {"status": "error", "message": str(e)}, 400
 
 		# Fallback: treat as raw XML
@@ -376,7 +376,7 @@ def webhook(**kwargs):
 			request_log.status = "Failed"
 			request_log.error = frappe.get_traceback()
 		frappe.db.rollback()
-		frappe.log_error(f"E-Document webhook failed: {e!s}", "E-Document Webhook Error")
+		frappe.log_error(title="E-Document Webhook Error", message=f"E-Document webhook failed: {e!s}")
 		frappe.db.commit()  # nosemgrep: Commit error state before returning
 		return {"status": "error", "message": "Internal server error"}, 500
 	finally:

@@ -16,6 +16,6 @@ def poll_all_incoming_documents():
 		except Exception:
 			frappe.db.rollback()
 			frappe.log_error(
-				f"Auto-poll failed for {settings_name}",
-				"EDocument Auto-Poll Error",
+				title="EDocument Auto-Poll Error",
+				message=f"Auto-poll failed for {settings_name}",
 			)

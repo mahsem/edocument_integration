@@ -76,7 +76,7 @@ class RecommandAPIClient:
 			return response
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Recommand API request failed: {e!s}"
-			frappe.log_error(error_msg, "Recommand API Error")
+			frappe.log_error(title="Recommand API Error", message=error_msg)
 			raise Exception(error_msg)
 
 	# ============================================================================
@@ -154,7 +154,8 @@ class RecommandAPIClient:
 
 				error_msg = f"Recommand API error ({response.status_code}): {error_text}"
 				frappe.log_error(
-					f"{error_msg}\nRequest Payload: {json.dumps(payload)}", "Recommand API Error"
+					title="Recommand API Error",
+					message=f"{error_msg}\nRequest Payload: {json.dumps(payload)}",
 				)
 				raise Exception(error_msg)
 
@@ -166,7 +167,7 @@ class RecommandAPIClient:
 
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Recommand document transmission failed: {e!s}"
-			frappe.log_error(error_msg, "Recommand Transmission Error")
+			frappe.log_error(title="Recommand Transmission Error", message=error_msg)
 			raise Exception(error_msg)
 
 	def get_documents(self, team_id: str, limit: int = 50, offset: int = 0) -> dict[str, Any]:
@@ -190,7 +191,7 @@ class RecommandAPIClient:
 			return response.json()
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Recommand get documents failed: {e!s}"
-			frappe.log_error(error_msg, "Recommand Get Documents Error")
+			frappe.log_error(title="Recommand Get Documents Error", message=error_msg)
 			raise Exception(error_msg)
 
 	def get_inbox(self, team_id: str, company_id: str | None = None) -> dict[str, Any]:
@@ -215,7 +216,7 @@ class RecommandAPIClient:
 			return response.json()
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Recommand get inbox failed: {e!s}"
-			frappe.log_error(error_msg, "Recommand Get Inbox Error")
+			frappe.log_error(title="Recommand Get Inbox Error", message=error_msg)
 			raise Exception(error_msg)
 
 	def verify_recipient(self, recipient_id: str, scheme: str = "GLN") -> dict[str, Any]:
@@ -238,7 +239,7 @@ class RecommandAPIClient:
 			return response.json()
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Recommand recipient verification failed: {e!s}"
-			frappe.log_error(error_msg, "Recommand Verification Error")
+			frappe.log_error(title="Recommand Verification Error", message=error_msg)
 			raise Exception(error_msg)
 
 	def get_document_status(self, team_id: str, document_id: str) -> dict[str, Any]:
@@ -260,7 +261,7 @@ class RecommandAPIClient:
 			return response.json()
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Recommand get document status failed: {e!s}"
-			frappe.log_error(error_msg, "Recommand Document Status Error")
+			frappe.log_error(title="Recommand Document Status Error", message=error_msg)
 			raise Exception(error_msg)
 
 
@@ -328,7 +329,7 @@ def transmit_invoice(xml_content: str, invoice_doc=None, integration_settings=No
 
 	except Exception as e:
 		error_msg = f"Recommand transmission failed: {e!s}"
-		frappe.log_error(error_msg, "Recommand Transmission Error")
+		frappe.log_error(title="Recommand Transmission Error", message=error_msg)
 		raise Exception(error_msg)
 
 
@@ -402,16 +403,16 @@ def poll_inbox(
 			document_obj = doc_details.get("document", {})
 			if not document_obj:
 				frappe.log_error(
-					f"No 'document' key found in response for {document_id}. Response keys: {list(doc_details.keys())}",
-					"Recommand Inbox Polling Error",
+					title="Recommand Inbox Polling Error",
+					message=f"No 'document' key found in response for {document_id}. Response keys: {list(doc_details.keys())}",
 				)
 				continue
 
 			xml_content = document_obj.get("xml")
 			if not xml_content:
 				frappe.log_error(
-					f"No 'xml' key found in document object for {document_id}. Document keys: {list(document_obj.keys())}",
-					"Recommand Inbox Polling Error",
+					title="Recommand Inbox Polling Error",
+					message=f"No 'xml' key found in document object for {document_id}. Document keys: {list(document_obj.keys())}",
 				)
 				continue
 
@@ -425,8 +426,8 @@ def poll_inbox(
 			)
 		except Exception as e:
 			frappe.log_error(
-				f"Failed to fetch document {doc.get('id')}: {e!s}\nTraceback: {frappe.get_traceback()}",
-				"Recommand Inbox Polling Error",
+				title="Recommand Inbox Polling Error",
+				message=f"Failed to fetch document {doc.get('id')}: {e!s}\nTraceback: {frappe.get_traceback()}",
 			)
 
 	return {"status": "success", "message": f"Found {len(invoices)} invoice(s)", "invoices": invoices}

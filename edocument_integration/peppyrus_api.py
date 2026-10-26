@@ -121,7 +121,7 @@ class PeppyrusAPIClient:
 			return response
 		except requests.exceptions.RequestException as exc:
 			error_msg = f"Peppyrus API request failed: {exc!s}"
-			frappe.log_error(error_msg, "Peppyrus API Error")
+			frappe.log_error(title="Peppyrus API Error", message=error_msg)
 			raise PeppyrusAPIError(error_msg) from exc
 
 	def _parse_json_response(self, response: requests.Response) -> dict[str, Any] | list[Any] | bool:
@@ -133,7 +133,7 @@ class PeppyrusAPIClient:
 				error_text = response.text
 
 			error_msg = f"Peppyrus API error ({response.status_code}): {error_text}"
-			frappe.log_error(error_msg, "Peppyrus API Error")
+			frappe.log_error(title="Peppyrus API Error", message=error_msg)
 			raise PeppyrusAPIError(error_msg)
 
 		if not response.content:
@@ -143,7 +143,7 @@ class PeppyrusAPIClient:
 			return response.json()
 		except json.JSONDecodeError as exc:
 			error_msg = f"Peppyrus API returned invalid JSON: {response.text}"
-			frappe.log_error(error_msg, "Peppyrus API Error")
+			frappe.log_error(title="Peppyrus API Error", message=error_msg)
 			raise PeppyrusAPIError(error_msg) from exc
 
 	# DOCUMENT TRANSMISSION METHODS
@@ -189,7 +189,7 @@ class PeppyrusAPIClient:
 			raise
 		except Exception as e:
 			error_msg = f"Peppyrus document transmission failed: {e!s}"
-			frappe.log_error(error_msg, "Peppyrus Transmission Error")
+			frappe.log_error(title="Peppyrus Transmission Error", message=error_msg)
 			raise PeppyrusAPIError(error_msg)
 
 	def list_messages(
@@ -219,7 +219,7 @@ class PeppyrusAPIClient:
 			return result
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Peppyrus list messages failed: {e!s}"
-			frappe.log_error(error_msg, "Peppyrus Message List Error")
+			frappe.log_error(title="Peppyrus Message List Error", message=error_msg)
 			raise PeppyrusAPIError(error_msg)
 
 	def get_message(self, message_id: str) -> dict[str, Any]:
@@ -232,7 +232,7 @@ class PeppyrusAPIClient:
 			return result
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Peppyrus get message failed: {e!s}"
-			frappe.log_error(error_msg, "Peppyrus Get Message Error")
+			frappe.log_error(title="Peppyrus Get Message Error", message=error_msg)
 			raise PeppyrusAPIError(error_msg)
 
 	def confirm_message(self, message_id: str) -> bool:
@@ -311,7 +311,7 @@ class PeppyrusAPIClient:
 			return self.get_message(document_id)
 		except requests.exceptions.RequestException as e:
 			error_msg = f"Peppyrus get document status failed: {e!s}"
-			frappe.log_error(error_msg, "Peppyrus Document Status Error")
+			frappe.log_error(title="Peppyrus Document Status Error", message=error_msg)
 			raise PeppyrusAPIError(error_msg)
 
 
@@ -351,7 +351,7 @@ def transmit_invoice(xml_content: str, invoice_doc=None, integration_settings=No
 
 	except Exception as e:
 		error_msg = f"Peppyrus transmission failed: {e!s}"
-		frappe.log_error(error_msg, "Peppyrus Transmission Error")
+		frappe.log_error(title="Peppyrus Transmission Error", message=error_msg)
 		raise PeppyrusAPIError(error_msg)
 
 
@@ -398,7 +398,9 @@ def poll_inbox(
 		try:
 			document_id = doc.get("id")
 			if not document_id:
-				frappe.log_error("Message entry is missing an ID", "Peppyrus Inbox Polling Error")
+				frappe.log_error(
+					title="Peppyrus Inbox Polling Error", message="Message entry is missing an ID"
+				)
 				continue
 
 			doc_details = client.get_message(document_id)
@@ -406,8 +408,8 @@ def poll_inbox(
 			file_content = doc_details.get("fileContent")
 			if not file_content:
 				frappe.log_error(
-					f"No 'fileContent' key found in response for {document_id}. Response keys: {list(doc_details.keys())}",
-					"Peppyrus Inbox Polling Error",
+					title="Peppyrus Inbox Polling Error",
+					message=f"No 'fileContent' key found in response for {document_id}. Response keys: {list(doc_details.keys())}",
 				)
 				continue
 
@@ -415,8 +417,8 @@ def poll_inbox(
 			invoices.append({"xml_bytes": xml_bytes, "document_id": document_id, "metadata": doc_details})
 		except Exception as e:
 			frappe.log_error(
-				f"Failed to fetch document {doc.get('id')}: {e!s}\nTraceback: {frappe.get_traceback()}",
-				"Peppyrus Inbox Polling Error",
+				title="Peppyrus Inbox Polling Error",
+				message=f"Failed to fetch document {doc.get('id')}: {e!s}\nTraceback: {frappe.get_traceback()}",
 			)
 
 	return {"status": "success", "message": f"Found {len(invoices)} invoice(s)", "invoices": invoices}

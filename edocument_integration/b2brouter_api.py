@@ -77,7 +77,7 @@ class B2BRouterAPIClient:
 
 		except requests.exceptions.RequestException as e:
 			error_msg = f"B2B Router API request failed: {e!s}"
-			frappe.log_error(error_msg, "B2B Router API Error")
+			frappe.log_error(title="B2B Router API Error", message=error_msg)
 			raise Exception(error_msg)
 
 	# ============================================================================
@@ -125,7 +125,7 @@ class B2BRouterAPIClient:
 					error_data = response.json()
 					error_messages = error_data.get("errors", [])
 					error_msg = f"B2B Router validation failed: {'; '.join(error_messages)}"
-					frappe.log_error(error_msg, "B2B Router Validation Error")
+					frappe.log_error(title="B2B Router Validation Error", message=error_msg)
 					raise Exception(error_msg)
 				except Exception:
 					raise Exception(f"B2B Router validation failed (422): {response.text}")
@@ -156,7 +156,7 @@ class B2BRouterAPIClient:
 
 		except requests.exceptions.RequestException as e:
 			error_msg = f"B2B Router invoice creation failed: {e!s}"
-			frappe.log_error(error_msg, "B2B Router Creation Error")
+			frappe.log_error(title="B2B Router Creation Error", message=error_msg)
 			raise Exception(error_msg)
 
 	def send_invoice(self, invoice_id: str) -> dict[str, Any]:
@@ -189,7 +189,7 @@ class B2BRouterAPIClient:
 
 		except requests.exceptions.RequestException as e:
 			error_msg = f"B2B Router invoice send failed: {e!s}"
-			frappe.log_error(error_msg, "B2B Router Send Error")
+			frappe.log_error(title="B2B Router Send Error", message=error_msg)
 			raise Exception(error_msg)
 
 	def transmit_invoice(
@@ -241,7 +241,7 @@ class B2BRouterAPIClient:
 
 		except Exception as e:
 			error_msg = f"B2B Router invoice transmission failed: {e!s}"
-			frappe.log_error(error_msg, "B2B Router Transmission Error")
+			frappe.log_error(title="B2B Router Transmission Error", message=error_msg)
 			raise Exception(error_msg)
 
 	def get_invoice_status(self, transmission_id: str) -> dict[str, Any]:
