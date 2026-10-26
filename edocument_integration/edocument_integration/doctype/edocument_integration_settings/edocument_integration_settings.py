@@ -92,8 +92,8 @@ class EDocumentIntegrationSettings(Document):
 		except Exception as e:
 			frappe.db.rollback()
 			frappe.log_error(
-				f"Failed to process incoming document (document_id: {document_id}): {e!s}\nTraceback: {frappe.get_traceback()}",
-				"Document Processing Error",
+				title="Document Processing Error",
+				message=f"Failed to process incoming document (document_id: {document_id}): {e!s}\nTraceback: {frappe.get_traceback()}",
 			)
 			raise
 
@@ -148,7 +148,8 @@ class EDocumentIntegrationSettings(Document):
 
 				if not xml_bytes:
 					frappe.log_error(
-						f"No xml_bytes found for document {document_id}", "Document Processing Error"
+						title="Document Processing Error",
+						message=f"No xml_bytes found for document {document_id}",
 					)
 					continue
 
@@ -157,8 +158,8 @@ class EDocumentIntegrationSettings(Document):
 					xml_bytes = xml_bytes.encode("utf-8")
 				elif not isinstance(xml_bytes, bytes):
 					frappe.log_error(
-						f"Invalid xml_bytes type: {type(xml_bytes)} for document {document_id}",
-						"Document Processing Error",
+						title="Document Processing Error",
+						message=f"Invalid xml_bytes type: {type(xml_bytes)} for document {document_id}",
 					)
 					continue
 
@@ -170,8 +171,8 @@ class EDocumentIntegrationSettings(Document):
 					processed.append(result)
 			except Exception as e:
 				frappe.log_error(
-					f"Failed to process document {document_data.get('document_id')}: {e!s}\nTraceback: {frappe.get_traceback()}",
-					"Document Processing Error",
+					title="Document Processing Error",
+					message=f"Failed to process document {document_data.get('document_id')}: {e!s}\nTraceback: {frappe.get_traceback()}",
 				)
 
 		message_parts = []
